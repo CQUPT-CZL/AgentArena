@@ -82,15 +82,31 @@ api.interceptors.response.use(
  */
 export class ChatService {
   /**
+   * 获取所有可用的agent
+   * @returns {Promise<Array>} agent列表
+   */
+  async getAgents() {
+    try {
+      const response = await api.get('/agents')
+      return response.data
+    } catch (error) {
+      console.error('获取agent列表失败:', error)
+      throw error
+    }
+  }
+
+  /**
    * 发送聊天消息
    * @param {string} message - 用户消息
+   * @param {string} agentName - agent名称
    * @param {string} conversationId - 对话ID
    * @returns {Promise<Object>} 响应数据
    */
-  async sendMessage(message, conversationId = 'default') {
+  async sendMessage(message, agentName = 'simple_chat', conversationId = 'default') {
     try {
       const response = await api.post('/chat', {
         message: message.trim(),
+        agent_name: agentName,
         conversation_id: conversationId
       })
       
@@ -103,15 +119,30 @@ export class ChatService {
 
   /**
    * 清除对话历史
+   * @param {string} agentName - agent名称
    * @param {string} conversationId - 对话ID
    * @returns {Promise<Object>} 响应数据
    */
-  async clearConversation(conversationId = 'default') {
+  async clearConversation(agentName = 'simple_chat', conversationId = 'default') {
     try {
-      const response = await api.delete(`/chat/${conversationId}`)
+      const response = await api.delete(`/chat/${agentName}/${conversationId}`)
       return response.data
     } catch (error) {
       console.error('清除对话失败:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 获取统计信息
+   * @returns {Promise<Object>} 统计数据
+   */
+  async getStats() {
+    try {
+      const response = await api.get('/stats')
+      return response.data
+    } catch (error) {
+      console.error('获取统计信息失败:', error)
       throw error
     }
   }

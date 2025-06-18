@@ -5,15 +5,35 @@
       <div class="header-content">
         <div class="logo">
           <span class="logo-icon">🤖</span>
-          <h1>ChatGPT 助手</h1>
+          <h1>AgentArena</h1>
         </div>
-        <button 
-          @click="clearChat" 
-          class="clear-btn"
-          :disabled="messages.length === 0"
-        >
-          🗑️ 清空对话
-        </button>
+        <div class="header-controls">
+          <!-- Agent选择器 -->
+          <div class="agent-selector">
+            <label for="agent-select">选择助手:</label>
+            <select 
+              id="agent-select"
+              v-model="selectedAgent" 
+              @change="onAgentChange"
+              class="agent-select"
+            >
+              <option 
+                v-for="agent in availableAgents" 
+                :key="agent.name" 
+                :value="agent.name"
+              >
+                {{ agent.display_name }}
+              </option>
+            </select>
+          </div>
+          <button 
+            @click="clearChat" 
+            class="clear-btn"
+            :disabled="messages.length === 0"
+          >
+            🗑️ 清空对话
+          </button>
+        </div>
       </div>
     </header>
 
@@ -24,8 +44,12 @@
         <div v-if="messages.length === 0" class="welcome-message">
           <div class="welcome-content">
             <span class="welcome-icon">👋</span>
-            <h2>欢迎使用 ChatGPT 助手</h2>
-            <p>我是你的AI助手，有什么可以帮助你的吗？</p>
+            <h2>欢迎使用 AgentArena</h2>
+            <div class="current-agent-info">
+              <h3>当前助手: {{ getCurrentAgentDisplayName() }}</h3>
+              <p>{{ getCurrentAgentDescription() }}</p>
+            </div>
+            <p>选择不同的助手体验不同的AI能力！</p>
           </div>
         </div>
 
@@ -117,6 +141,8 @@ export default {
     const messagesContainer = ref(null)
     const messageInput = ref(null)
     const conversationId = ref('default')
+    const selectedAgent = ref('simple_chat')
+    const availableAgents = ref([])
 
     // 配置marked
     marked.setOptions({
@@ -140,6 +166,40 @@ export default {
         hour: '2-digit',
         minute: '2-digit'
       })
+    }
+
+    // 获取可用的agents
+    const loadAgents = async () => {
+      try {
+        const agents = await chatService.getAgents()
+        availableAgents.value = agents
+        // 如果当前选择的agent不在列表中，选择第一个
+        if (agents.length > 0 && !agents.find(a => a.name === selectedAgent.value)) {
+          selectedAgent.value = agents[0].name
+        }
+      } catch (err) {
+        console.error('加载agents失败:', err)
+        error.value = '加载助手列表失败'
+      }
+    }
+
+    // 获取当前agent的显示名称
+    const getCurrentAgentDisplayName = () => {
+      const agent = availableAgents.value.find(a => a.name === selectedAgent.value)
+      return agent ? agent.display_name : '未知助手'
+    }
+
+    // 获取当前agent的描述
+    const getCurrentAgentDescription = () => {
+      const agent = availableAgents.value.find(a => a.name === selectedAgent.value)
+      return agent ? agent.description : ''
+    }
+
+    // agent切换处理
+    const onAgentChange = () => {
+      // 切换agent时清空当前对话
+      messages.value = []
+      error.value = ''
     }
 
     // 滚动到底部
@@ -180,7 +240,7 @@ export default {
       scrollToBottom()
 
       try {
-        const response = await chatService.sendMessage(message, conversationId.value)
+        const response = await chatService.sendMessage(message, selectedAgent.value, conversationId.value)
         
         // 添加AI回复
         messages.value.push({
@@ -206,12 +266,17 @@ export default {
       
       if (confirm('确定要清空所有对话吗？')) {
         try {
-          await chatService.clearConversation(conversationId.value)
+          await chatService.clearConversation(selectedAgent.value, conversationId.value)
           messages.value = []
           error.value = ''
+          nextTick(() => {
+            messageInput.value?.focus()
+          })
         } catch (err) {
           console.error('清空对话失败:', err)
-          error.value = '清空对话失败'
+          // 即使清空失败，也清空前端显示
+          messages.value = []
+          error.value = ''
         }
       }
     }
@@ -224,9 +289,10 @@ export default {
       }
     }
 
-    // 组件挂载后聚焦输入框
-    onMounted(() => {
+    // 组件挂载后聚焦输入框和加载agents
+    onMounted(async () => {
       messageInput.value?.focus()
+      await loadAgents()
     })
 
     return {
@@ -236,12 +302,18 @@ export default {
       error,
       messagesContainer,
       messageInput,
+      selectedAgent,
+      availableAgents,
       formatMessage,
       formatTime,
       sendMessage,
       clearChat,
       handleKeydown,
-      adjustTextareaHeight
+      adjustTextareaHeight,
+      loadAgents,
+      getCurrentAgentDisplayName,
+      getCurrentAgentDescription,
+      onAgentChange
     }
   }
 }
@@ -262,20 +334,22 @@ export default {
 .chat-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1rem 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  padding: 1rem 2rem;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .logo {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 
 .logo-icon {
@@ -283,8 +357,47 @@ export default {
 }
 
 .logo h1 {
+  margin: 0;
   font-size: 1.5rem;
   font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.agent-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.agent-selector label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.agent-select {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  font-size: 0.9rem;
+  min-width: 120px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.agent-select:hover {
+  background: white;
+}
+
+.agent-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
 }
 
 .clear-btn {
@@ -348,6 +461,26 @@ export default {
   color: #1f2937;
   margin-bottom: 0.5rem;
   font-size: 1.5rem;
+}
+
+.current-agent-info {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  padding: 1rem;
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+
+.current-agent-info h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.current-agent-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
 }
 
 .welcome-content p {

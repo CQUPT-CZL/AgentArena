@@ -1,4 +1,6 @@
-# AgentArena - ChatGPT 聊天应用
+<div align="center">
+  <img src="static/logo.png" alt="AgentArena Logo">
+</div>
 
 一个基于Vue3前端和FastAPI后端的现代化ChatGPT聊天应用。
 
